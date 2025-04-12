@@ -1,26 +1,10 @@
 import os
 import pandas as pd
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
 
 from app.models.entities import StateDemography, CountyDemography
+from app.services.database import get_db
 
-# Set up PostgreSQL connection
-POSTGRES_USER = os.getenv('POSTGRES_USER', 'tsg_user')
-POSTGRES_PASSWORD = os.getenv('POSTGRES_PASSWORD', 'tsg_pass')
-POSTGRES_DB = os.getenv('POSTGRES_DB', 'tsg_db')
-PGADMIN_DEFAULT_EMAIL = os.getenv('PGADMIN_DEFAULT_EMAIL', 'admin@tsg.com')
-PGADMIN_DEFAULT_PASSWORD = os.getenv('PGADMIN_DEFAULT_PASSWORD', 'admin')
-
-# Create connection string
-DATABASE_URL = f'postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@localhost/{POSTGRES_DB}'
-
-# Create SQLAlchemy engine and session
-engine = create_engine(DATABASE_URL)
-Session = sessionmaker(bind=engine)
-session = Session()
-
-# Define table classes for SQLAlchemy
+session = next(get_db())
 
 def load_state_data(csv_file, year):
     # Read state data from CSV
