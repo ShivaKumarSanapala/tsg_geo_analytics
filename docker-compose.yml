@@ -1,0 +1,61 @@
+services:
+  db:
+    image: postgis/postgis:latest
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data_p:/var/lib/postgresql/data
+      - ./com/tsg/loader/schema.sql:/docker-entrypoint-initdb.d/schema.sql
+    networks:
+      - postgres_network
+
+  redis:
+    image: redis:7
+    platform: linux/arm64
+    container_name: redis-cache
+    ports:
+      - "6379:6379"
+    restart: always
+    networks:
+      - postgres_network
+
+  pgadmin:
+    image: dpage/pgadmin4
+    platform: linux/arm64
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD}
+    ports:
+      - "5050:80"
+    depends_on:
+      - db
+    networks:
+      - postgres_network
+
+  tsg_backend:
+    image: tsg_backend
+    volumes:
+      - .:/app
+    ports:
+      - "5002:5000"
+    depends_on:
+      - db
+    networks:
+      - postgres_network
+    command: ["python", "tsg/api/server.py"]
+    environment:
+      APP_PORT: 5002
+      REDIS_HOST: ${REDIS_HOST}
+      REDIS_PORT: ${REDIS_PORT}
+
+volumes:
+  postgres_data_p:
+    driver: local
+
+networks:
+  postgres_network:
+    driver: bridge
