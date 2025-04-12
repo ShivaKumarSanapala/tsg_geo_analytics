@@ -9,8 +9,8 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data_1:/var/lib/postgresql/data
-      - ./scripts/schema.sql:/docker-entrypoint-initdb.d/schema.sql
+#      - postgres_data_1:/var/lib/postgresql/data
+      - ./app/scripts/schema.sql:/docker-entrypoint-initdb.d/schema.sql
     networks:
       - postgres_network
     healthcheck:
@@ -65,9 +65,9 @@ services:
       APP_PORT: ${APP_PORT}
     command: ["python", "-m", "app.main"]
 
-volumes:
-  postgres_data_1:
-    driver: local
+#volumes:
+#  postgres_data_1:
+#    driver: local
 
 networks:
   postgres_network:

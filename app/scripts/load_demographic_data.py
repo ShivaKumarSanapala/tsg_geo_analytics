@@ -3,7 +3,7 @@ import pandas as pd
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from tsg.api.models import StateDemography, CountyDemography
+from app.models.entities import StateDemography, CountyDemography
 
 # Set up PostgreSQL connection
 POSTGRES_USER = os.getenv('POSTGRES_USER', 'tsg_user')
@@ -86,5 +86,6 @@ def load_data_for_all_years():
 
 
 if __name__ == '__main__':
+    print("Demographic Data loading in Database....please wait...")
     load_data_for_all_years()
     print("Data loading completed.")
