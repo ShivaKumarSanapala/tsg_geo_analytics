@@ -1,5 +1,6 @@
 import os
 import pandas as pd
+import subprocess
 
 from app.models.entities import StateDemography, CountyDemography
 from app.services.database import get_db
@@ -69,7 +70,16 @@ def load_data_for_all_years():
             print(f"Data files for year {year} not found. Skipping...")
 
 
-if __name__ == '__main__':
-    print("Demographic Data loading in Database....please wait...")
+def load_demographic_data():
+    print("Generating CSVs using batch_data_from_acs.sh...")
+    try:
+        subprocess.run(["bash", "./batch_data_from_acs.sh"], check=True)
+        print("CSV generation completed.")
+    except subprocess.CalledProcessError as e:
+        print("CSV generation failed!")
+        print(e)
+        exit(1)
+    print("Demographic Data loading into Database....please wait...")
     load_data_for_all_years()
-    print("Data loading completed.")
+    print("Demographic Data loading into Database for States and Counties completed!")
+
