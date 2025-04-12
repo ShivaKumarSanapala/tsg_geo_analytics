@@ -26,7 +26,7 @@ def calculate_centroids_lat_lng():
         session.close()
 
 if __name__ == '__main__':
-    # load_demographic_data()
+    load_demographic_data()
     print("Loaded demographic data")
     load_geographical_data()
     print("Loaded geographical data")
