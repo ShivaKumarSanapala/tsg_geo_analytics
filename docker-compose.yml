@@ -1,0 +1,96 @@
+services:
+  db:
+    image: postgis/postgis:latest
+    container_name: postgres-db
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "5432:5432"
+    volumes:
+#      - postgres_data_1:/var/lib/postgresql/data
+      - ./app/scripts/schema.sql:/docker-entrypoint-initdb.d/schema.sql
+    networks:
+      - postgres_network
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "${POSTGRES_USER}", "-d", "${POSTGRES_DB}", "-h", "localhost"]
+      interval: 10s
+      retries: 5
+      start_period: 30s
+      timeout: 10s
+
+  redis:
+    image: redis:7
+    platform: linux/arm64
+    container_name: redis-cache
+    ports:
+      - "6379:6379"
+    restart: always
+    networks:
+      - postgres_network
+
+  pgadmin:
+    image: dpage/pgadmin4
+    platform: linux/arm64
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD}
+    ports:
+      - "5050:80"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - postgres_network
+
+  tsg_backend:
+    image: tsg_geo_analytics
+    container_name: tsg_geo_analytics
+    ports:
+      - "${APP_PORT}:5001"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - postgres_network
+    environment:
+      POSTGRES_HOST: postgres-db
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      REDIS_HOST: redis-cache
+      REDIS_PORT: ${REDIS_PORT}
+      APP_PORT: ${APP_PORT}
+    command: ["python", "-m", "app.main"]
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:${APP_PORT}/health" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+
+  tsg_frontend:
+      image: tsg_frontend
+      container_name: tsg_frontend
+      ports:
+        - "3000:80"
+      depends_on:
+        - tsg_backend
+      networks:
+        - postgres_network
+      environment:
+        - REACT_APP_MAPBOX_TOKEN=${REACT_APP_MAPBOX_TOKEN}
+        - REACT_APP_BASE_URL=${REACT_APP_BASE_URL}
+
+
+#volumes:
+#  postgres_data_1:
+#    driver: local
+
+networks:
+  postgres_network:
+    driver: bridge

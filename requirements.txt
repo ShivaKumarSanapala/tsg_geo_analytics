@@ -1,0 +1,16 @@
+psycopg2-binary
+redis
+requests
+pandas
+fastapi
+uvicorn
+SQLAlchemy
+GeoAlchemy2
+bs4
+tenacity
+lxml
+html5lib
+Flask
+Flask-CORS
+python-dotenv
+shapely
