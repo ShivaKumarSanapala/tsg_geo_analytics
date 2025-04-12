@@ -95,3 +95,27 @@ A high-level overview of the system components and their interactions is availab
 - For Mapbox access, set your access token in a `.env` file inside the frontend directory if required.
 
 ---
+
+## 🔍 ML-Based Population Trend Analysis
+
+A simple machine learning model was used to analyze and forecast state-level population trends and economic indicators. Key points:
+
+- **Dataset**: 364 entries from 2017–2023 covering population, education, income, and housing data.
+- **Model**: `LinearRegression` to forecast population trends; `RandomForestClassifier` for demographic pattern classification.
+- **Output**: State-wise prediction of population growth rates and median household income trends.
+
+### 🔹 Example Forecast (for Michigan):
+
+| Year | Predicted Population |
+|------|----------------------|
+| 2025 | 5,797,457.93         |
+| 2026 | 5,826,882.21         |
+| 2027 | 5,856,306.50         |
+
+### 🔹 Visualization Report:
+
+To explore detailed visual trends, open:
+
+📄 **`populationtrendStatewise.html`** — State-wise forecasted population trends.
+
+---
