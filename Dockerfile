@@ -1,7 +1,7 @@
 FROM alpine/git AS cloner
 WORKDIR /src
 ARG CACHEBUST=1
-RUN git clone --depth 2 https://github.com/ShivaKumarSanapala/tsg_geo_analytics.git .
+RUN git clone https://github.com/ShivaKumarSanapala/tsg_geo_analytics.git .
 
 FROM python:3.11
 
