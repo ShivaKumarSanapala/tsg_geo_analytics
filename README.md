@@ -1,5 +1,22 @@
+The error you're encountering usually happens due to incorrect formatting or YAML-related issues. However, since this is a `README.md` file (which uses Markdown, not YAML), this issue likely isn't related to the content of the `README.md`, but instead could be related to how you're using or configuring something like a CI/CD pipeline, a YAML file, or a config file somewhere in the project.
+
+Here's how you can debug and resolve the issue:
+
+1. **Ensure Proper Formatting in the README.md**: Double-check that the content you provided is correctly formatted in Markdown. From the text you posted, it seems fine, and there's no direct YAML syntax being used here.
+
+2. **Check YAML or Configuration Files**: If this error is coming from a YAML configuration file related to Docker, Docker Compose, or a CI/CD tool (like GitHub Actions, Jenkins, or others), make sure the YAML syntax is correct. Here's an example of what might be wrong:
+    - Missing spaces after colons (`:`).
+    - Using tabs instead of spaces.
+    - Incorrect indentation levels.
+
+3. **Check Docker and Docker Compose Configurations**: 
+    If you’re using Docker Compose or a `.yaml` config in the project, ensure that the YAML files (`docker-compose.yml` or similar) are properly formatted. Make sure there are no stray characters or syntax errors in them.
+
 ---
 
+### Here’s a Clean Version of Your `README.md`
+
+```markdown
 # 🗺️ TSG Geo Analytics
 
 **TSG Geo Analytics** is a full-stack platform for geospatial data analytics and visualization. It combines a modern React frontend, a Flask-based Python backend, and a PostgreSQL/PostGIS database—fully containerized using Docker and orchestrated via Docker Compose.
