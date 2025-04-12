@@ -1,6 +1,6 @@
 import json
 from flask import jsonify
-from sqlalchemy import text
+from sqlalchemy import text, or_
 from geoalchemy2.functions import ST_Distance, ST_SetSRID, ST_GeomFromText, ST_Within, ST_Contains
 
 from app.services import cache
@@ -9,14 +9,9 @@ from app.services.database import get_db, SessionLocal
 from app.models.entities import City, County, State, StateDemography, CountyDemography
 from app.utils.geo_utils import to_geojson_from_wkb
 
-# services/geospatial.py
-from sqlalchemy import or_
-from app.models.entities import State, County
-from app.services.database import get_db  # or use `SessionLocal()` if you're doing manual session handling
-
 def search_boundaries_service(boundary_type: str, query: str):
     """
-    Search for states or counties by name or geo_id, including geometry.
+    Search for states or counties by name or geo_id, including geometry, with caching.
 
     Args:
         boundary_type (str): 'states' or 'counties'.
@@ -25,8 +20,19 @@ def search_boundaries_service(boundary_type: str, query: str):
     Returns:
         list[dict]: List of matched boundaries with name, geo_id and geometry.
     """
+    redis_client = cache.redis_client
     query = query.lower()  # normalize input
 
+    # Define cache key using boundary type and query
+    cache_key = f"search:{boundary_type}:{query}"
+
+    # Try to get cached data
+    cached_results = redis_client.get(cache_key)
+    if cached_results:
+        # If cache is found, return it
+        return json.loads(cached_results)
+
+    # If no cache, query the database
     db = next(get_db())
 
     if boundary_type == 'states':
@@ -36,7 +42,8 @@ def search_boundaries_service(boundary_type: str, query: str):
                 State.geoid.ilike(f"%{query}%")
             )
         ).all()
-        return [{"name": name, "geo_id": geoid, "geometry": to_geojson_from_wkb(geometry)} for name, geoid, geometry in results]
+        data = [{"name": name, "geo_id": geoid, "geometry": to_geojson_from_wkb(geometry)} for name, geoid, geometry in
+                results]
 
     elif boundary_type == 'counties':
         results = db.query(County.name, County.geoid, County.wkb_geometry).filter(
@@ -45,10 +52,16 @@ def search_boundaries_service(boundary_type: str, query: str):
                 County.geoid.ilike(f"%{query}%")
             )
         ).all()
-        return [{"name": name, "geo_id": geoid, "geometry": to_geojson_from_wkb(geometry)} for name, geoid, geometry in results]
+        data = [{"name": name, "geo_id": geoid, "geometry": to_geojson_from_wkb(geometry)} for name, geoid, geometry in
+                results]
 
     else:
         raise ValueError("Invalid boundaryType. Must be 'states' or 'counties'.")
+
+    # Store the results in the cache for 60 minutes (adjust as needed)
+    redis_client.setex(cache_key, 3600, json.dumps(data))
+
+    return data
 
 def get_nearby_cities_from_redis(lat, lng, radius, page, limit):
     offset = (page - 1) * limit
