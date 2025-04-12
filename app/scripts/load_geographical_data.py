@@ -2,19 +2,20 @@ import subprocess
 import os
 
 def load_geographical_data():
-    script_path = os.path.join(os.path.dirname(__file__), "load_shapefiles_into_db.sh")
+    current_dir = os.path.abspath(os.path.dirname(__file__))
+    script_path = os.path.join(current_dir, "load_shapefiles_into_db.sh")
 
-    print("Running geographical data loader script...")
+    print("Running geographical data loader script...\n")
 
     try:
-        result = subprocess.run(
+        subprocess.run(
             ["bash", script_path],
             check=True,
-            capture_output=True,
+            stdout=None,
+            stderr=None,
             text=True
         )
-        print("Geographical data loaded successfully.")
-        print(result.stdout)
+        print("\nGeographical data loaded successfully.")
     except subprocess.CalledProcessError as e:
-        print("Error while loading geographical data:")
-        print(e.stderr)
+        print("\nError while loading geographical data:")
+        print(f"Exit code: {e.returncode}")
