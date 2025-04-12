@@ -1,7 +1,7 @@
 from flask import request, jsonify
 
 from app.services.geospatial import fetch_cities_within_polygon, fetch_nearby_cities, fetch_encompassing_boundaries, \
-    get_nearby_cities_from_redis
+    get_nearby_cities_from_redis, search_boundaries_service
 from flask import Blueprint
 
 geo_api = Blueprint('geo_api', __name__)
@@ -58,3 +58,19 @@ def encompassing_boundaries():
         return jsonify({"error": "Invalid page or limit parameters"}), 400
 
     return fetch_encompassing_boundaries(geoidfq, page, limit)
+
+@geo_api.route('/search', methods=['GET'])
+def search_boundaries():
+    boundary_type = request.args.get('boundaryType')
+    query = request.args.get('query', '')
+
+    if not boundary_type or boundary_type not in ['states', 'counties']:
+        return jsonify({"error": "Invalid boundaryType. Must be 'states' or 'counties'."}), 400
+
+    try:
+        results = search_boundaries_service(boundary_type, query)
+        return jsonify(results)
+    except ValueError as ve:
+        return jsonify({"error": str(ve)}), 400
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500

@@ -4,16 +4,59 @@ from sqlalchemy import text
 from geoalchemy2.functions import ST_Distance, ST_SetSRID, ST_GeomFromText, ST_Within, ST_Contains
 
 from app.services import cache
+from app.services.cache import city_data_key, cities_geo_index
 from app.services.database import get_db, SessionLocal
 from app.models.entities import City, County, State, StateDemography, CountyDemography
 from app.utils.geo_utils import to_geojson_from_wkb
+
+# services/geospatial.py
+from sqlalchemy import or_
+from app.models.entities import State, County
+from app.services.database import get_db  # or use `SessionLocal()` if you're doing manual session handling
+
+def search_boundaries_service(boundary_type: str, query: str):
+    """
+    Search for states or counties by name or geo_id.
+
+    Args:
+        boundary_type (str): 'states' or 'counties'.
+        query (str): Search query.
+
+    Returns:
+        list[dict]: List of matched boundaries.
+    """
+    query = query.lower()  # normalize input
+
+    db = next(get_db())
+
+    if boundary_type == 'states':
+        results = db.query(State.name, State.geoid).filter(
+            or_(
+                State.name.ilike(f"%{query}%"),
+                State.geoid.ilike(f"%{query}%")
+            )
+        ).all()
+        return [{"name": name, "geo_id": geoid} for name, geoid in results]
+
+    elif boundary_type == 'counties':
+        results = db.query(County.name, County.geoid).filter(
+            or_(
+                County.name.ilike(f"%{query}%"),
+                County.geoid.ilike(f"%{query}%")
+            )
+        ).all()
+        return [{"name": name, "geo_id": geoid} for name, geoid in results]
+
+    else:
+        raise ValueError("Invalid boundaryType. Must be 'states' or 'counties'.")
+
 
 def get_nearby_cities_from_redis(lat, lng, radius, page, limit):
     offset = (page - 1) * limit
     redis_client = cache.redis_client
 
     all_city_ids = redis_client.geosearch(
-        "cities:geo",
+        cities_geo_index(),
         longitude=lng,
         latitude=lat,
         radius=radius,
@@ -35,7 +78,7 @@ def get_nearby_cities_from_redis(lat, lng, radius, page, limit):
 
         # Try to get cached cities from Redis
         for cid in city_ids:
-            key = f"city:data:{cid}"
+            key = city_data_key(cid)
             cached_city = redis_client.get(key)
             if cached_city:
                 city = json.loads(cached_city)
@@ -141,9 +184,11 @@ def fetch_demographics(lat, lng):
         return jsonify({"error": str(e)}), 500
 
 def fetch_cities_within_polygon(data, page, per_page, sort_by, sort_order):
+    # Validate the required polygon field
     if "polygon_wkt" not in data:
         return jsonify({"error": "polygon_wkt is required"}), 400
 
+    # Verify the polygon is valid
     try:
         polygon_geom = ST_SetSRID(ST_GeomFromText(data["polygon_wkt"]), 4326)
     except Exception as e:
@@ -151,37 +196,74 @@ def fetch_cities_within_polygon(data, page, per_page, sort_by, sort_order):
 
     redis_client = cache.redis_client
 
+    # Open a DB session
     with next(get_db()) as db:
-        query = db.query(City.geoidfq).filter(
-            ST_Within(ST_SetSRID(City.wkb_geometry, 4326), polygon_geom)
+        # ─── STEP 1: Compute Bounding Circle (center & radius) ─────────────────────
+        # This raw SQL uses PostGIS functions to compute:
+        # - the centroid of the polygon, and
+        # - an approximate radius from the centroid to one point on the polygon's exterior.
+        bounding_result = db.execute(
+            text("""
+            WITH poly AS (
+              SELECT ST_GeomFromText(:polygon_wkt, 4326) AS geom
+            ),
+            center AS (
+              SELECT ST_Centroid(geom) AS centroid FROM poly
+            ),
+            radius AS (
+              SELECT ST_DistanceSphere(centroid, ST_PointN(ST_ExteriorRing(geom), 1)) AS radius
+              FROM poly, center
+            )
+            SELECT ST_Y(centroid) AS lat, ST_X(centroid) AS lng, radius 
+            FROM center, radius;
+            """),
+            {"polygon_wkt": data["polygon_wkt"]}
+        ).mappings().fetchone()
+
+        if not bounding_result:
+            return jsonify({"error": "Failed to compute bounding circle"}), 500
+
+        center_lat = bounding_result["lat"]
+        center_lng = bounding_result["lng"]
+        radius_meters = bounding_result["radius"]
+
+        # ─── STEP 2: Get Candidate Cities from Redis Using the Bounding Circle ───────
+        # Use Redis geospatial query to retrieve candidate cities within the bounding circle.
+        redis_candidates = redis_client.geosearch(
+            cities_geo_index(),
+            longitude=center_lng,
+            latitude=center_lat,
+            radius=radius_meters,
+            unit="m",
+            withdist=True,
+            sort="ASC"
         )
 
-        if sort_order not in ['asc', 'desc']:
-            return jsonify({"error": "Invalid sort_order. Must be 'asc' or 'desc'."}), 400
+        # Extract city IDs from the redis results.
+        # Note: Each item is typically (city_id, distance)
+        candidate_ids = [item[0] for item in redis_candidates]
 
-        order_column = getattr(City, sort_by)
-        query = query.order_by(order_column.asc() if sort_order == 'asc' else order_column.desc())
+        # If needed, you can further filter the candidates (e.g. with an in-memory check or DB query)
+        # to ensure the points actually fall within the original polygon.
 
-        # Get just geoidfqs for pagination
-        city_ids = [r[0] for r in query.offset((page - 1) * per_page).limit(per_page).all()]
-        total = db.query(City).filter(
-            ST_Within(ST_SetSRID(City.wkb_geometry, 4326), polygon_geom)
-        ).count()
+        # ─── STEP 3: Paginate Candidate City IDs ─────────────────────────────────────
+        total = len(candidate_ids)
+        start = (page - 1) * per_page
+        end = start + per_page
+        paginated_city_ids = candidate_ids[start:end]
 
-        cities = []
-        missing_ids = []
+        # ─── STEP 4: Retrieve City Data from Redis (or DB if not cached) ───────────────
         city_map = {}
-
-        # Try Redis cache
-        for cid in city_ids:
-            key = f"city:data:{cid}"
+        missing_ids = []
+        for cid in paginated_city_ids:
+            key = city_data_key(cid)
             cached = redis_client.get(key)
             if cached:
                 city_map[cid] = json.loads(cached)
             else:
                 missing_ids.append(cid)
 
-        # Fetch missing cities from DB
+        # Query the DB for any missing IDs and cache them for future use
         if missing_ids:
             db_cities = db.query(City).filter(City.geoidfq.in_(missing_ids)).all()
             for city in db_cities:
@@ -191,15 +273,22 @@ def fetch_cities_within_polygon(data, page, per_page, sort_by, sort_order):
                     "aland": city.aland,
                     "lat": city.centroid_lat,
                     "lng": city.centroid_lon,
-                    "geoidfq": city.geoidfq
+                    "geoidfq": city.geoidfq,
+                    # Optionally include more details, such as geojson:
+                    # "geojson": to_geojson_from_wkb(city.wkb_geometry)
                 }
                 redis_client.set(f"city:data:{city.geoidfq}", json.dumps(city_data))
                 city_map[city.geoidfq] = city_data
 
-        # Maintain original order
-        cities = [city_map[cid] for cid in city_ids if cid in city_map]
+        # Maintain the original order from our candidate IDs
+        cities = [city_map[cid] for cid in paginated_city_ids if cid in city_map]
 
+        # ─── Return the Aggregated Result ─────────────────────────────────────────────
         return jsonify({
+            "bounding_circle": {
+                "center": {"lat": center_lat, "lng": center_lng},
+                "radius_meters": radius_meters
+            },
             "cities": cities,
             "pagination": {
                 "page": page,

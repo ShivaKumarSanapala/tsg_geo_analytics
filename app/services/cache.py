@@ -39,3 +39,15 @@ def load_cities_to_redis_from_db():
         return len(cities)
     finally:
         session.close()
+
+def city_data_key(geoidfq):
+    return f"city:data:{geoidfq}"
+
+def geojson_state_key(geoidfq):
+    return f"geojson:state:{geoidfq}"
+
+def geojson_county_key(geoidfq):
+    return f"geojson:county:{geoidfq}"
+
+def cities_geo_index():
+    return "cities:geo"

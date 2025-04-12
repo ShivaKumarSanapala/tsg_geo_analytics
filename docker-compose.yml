@@ -65,6 +65,27 @@ services:
       REDIS_PORT: ${REDIS_PORT}
       APP_PORT: ${APP_PORT}
     command: ["python", "-m", "app.main"]
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:${APP_PORT}/health" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+
+  tsg_frontend:
+      image: tsg_frontend
+      container_name: tsg_frontend
+      ports:
+        - "3000:80"
+      depends_on:
+        - tsg_backend
+      networks:
+        - postgres_network
+      environment:
+        - REACT_APP_MAPBOX_TOKEN=${REACT_APP_MAPBOX_TOKEN}
+        - REACT_APP_BASE_URL=${REACT_APP_BASE_URL}
+
 
 #volumes:
 #  postgres_data_1:
