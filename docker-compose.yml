@@ -1,6 +1,7 @@
 services:
   db:
     image: postgis/postgis:latest
+    container_name: postgres-db
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
@@ -9,7 +10,7 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data_p:/var/lib/postgresql/data
-      - ./com/tsg/loader/schema.sql:/docker-entrypoint-initdb.d/schema.sql
+      - ./scripts/schema.sql:/docker-entrypoint-initdb.d/schema.sql
     networks:
       - postgres_network
 
@@ -37,20 +38,23 @@ services:
       - postgres_network
 
   tsg_backend:
-    image: tsg_backend
-    volumes:
-      - .:/app
+    image: tsg_geo_analytics
     ports:
-      - "5002:5000"
+      - "${APP_PORT}:5000"
     depends_on:
       - db
+      - redis
     networks:
       - postgres_network
-    command: ["python", "tsg/api/server.py"]
     environment:
-      APP_PORT: 5002
+      POSTGRES_HOST: ${POSTGRES_HOST}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       REDIS_HOST: ${REDIS_HOST}
       REDIS_PORT: ${REDIS_PORT}
+      APP_PORT: ${APP_PORT}
+    command: ["python", "-m", "app.main"]
 
 volumes:
   postgres_data_p:

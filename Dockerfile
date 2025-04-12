@@ -1,10 +1,11 @@
 FROM python:3.11
 
+RUN apt-get update && apt-get install -y git
+
 WORKDIR /app
 
-COPY requirements.txt .
+RUN git clone https://github.com/ShivaKumarSanapala/tsg_geo_analytics.git .
+
 RUN pip install -r requirements.txt
 
-COPY . .
-
-CMD ["python", "app/main.py"]
+CMD ["python", "-m", "app.main"]
