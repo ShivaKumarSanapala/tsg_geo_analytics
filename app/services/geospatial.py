@@ -16,40 +16,39 @@ from app.services.database import get_db  # or use `SessionLocal()` if you're do
 
 def search_boundaries_service(boundary_type: str, query: str):
     """
-    Search for states or counties by name or geo_id.
+    Search for states or counties by name or geo_id, including geometry.
 
     Args:
         boundary_type (str): 'states' or 'counties'.
         query (str): Search query.
 
     Returns:
-        list[dict]: List of matched boundaries.
+        list[dict]: List of matched boundaries with name, geo_id and geometry.
     """
     query = query.lower()  # normalize input
 
     db = next(get_db())
 
     if boundary_type == 'states':
-        results = db.query(State.name, State.geoid).filter(
+        results = db.query(State.name, State.geoid, State.wkb_geometry).filter(
             or_(
                 State.name.ilike(f"%{query}%"),
                 State.geoid.ilike(f"%{query}%")
             )
         ).all()
-        return [{"name": name, "geo_id": geoid} for name, geoid in results]
+        return [{"name": name, "geo_id": geoid, "geometry": to_geojson_from_wkb(geometry)} for name, geoid, geometry in results]
 
     elif boundary_type == 'counties':
-        results = db.query(County.name, County.geoid).filter(
+        results = db.query(County.name, County.geoid, County.wkb_geometry).filter(
             or_(
                 County.name.ilike(f"%{query}%"),
                 County.geoid.ilike(f"%{query}%")
             )
         ).all()
-        return [{"name": name, "geo_id": geoid} for name, geoid in results]
+        return [{"name": name, "geo_id": geoid, "geometry": to_geojson_from_wkb(geometry)} for name, geoid, geometry in results]
 
     else:
         raise ValueError("Invalid boundaryType. Must be 'states' or 'counties'.")
-
 
 def get_nearby_cities_from_redis(lat, lng, radius, page, limit):
     offset = (page - 1) * limit
