@@ -1,3 +1,4 @@
+import json
 from flask import jsonify
 from sqlalchemy import text
 from geoalchemy2.functions import ST_Distance, ST_SetSRID, ST_GeomFromText, ST_Within, ST_Contains
@@ -28,21 +29,40 @@ def get_nearby_cities_from_redis(lat, lng, radius, page, limit):
 
     session = SessionLocal()
     try:
-        cities = session.query(City).filter(City.geoidfq.in_(city_ids)).all()
-        city_map = {city.geoidfq: city for city in cities}
-
         nearby = []
+        missing_ids = []
+        city_map = {}
+
+        # Try to get cached cities from Redis
         for cid in city_ids:
-            city = city_map.get(cid)
-            if city:
-                nearby.append({
+            key = f"city:data:{cid}"
+            cached_city = redis_client.get(key)
+            if cached_city:
+                city = json.loads(cached_city)
+                city_map[cid] = city
+            else:
+                missing_ids.append(cid)
+
+        # Fetch missing cities from DB
+        if missing_ids:
+            db_cities = session.query(City).filter(City.geoidfq.in_(missing_ids)).all()
+            for city in db_cities:
+                city_data = {
                     "name": city.name,
                     "geoidfq": city.geoidfq,
                     "lat": city.centroid_lat,
                     "lng": city.centroid_lon,
-                    "distance": distances[cid],
                     "geojson": to_geojson_from_wkb(city.wkb_geometry)
-                })
+                }
+                redis_client.set(f"city:data:{city.geoidfq}", json.dumps(city_data))
+                city_map[city.geoidfq] = city_data
+
+        # Build nearby list
+        for cid in city_ids:
+            city_data = city_map.get(cid)
+            if city_data:
+                city_data["distance"] = distances[cid]
+                nearby.append(city_data)
 
         return {
             "latitude": lat,
@@ -53,6 +73,7 @@ def get_nearby_cities_from_redis(lat, lng, radius, page, limit):
             "total_count": total_count,
             "nearby": nearby
         }
+
     finally:
         session.close()
 
@@ -62,21 +83,40 @@ def fetch_demographics(lat, lng):
 
     point_wkt = f'POINT({lng} {lat})'
     db = next(get_db())
+    redis_client = cache.redis_client
 
     try:
         state_obj = db.query(State).filter(
             ST_Contains(State.wkb_geometry, ST_SetSRID(ST_GeomFromText(point_wkt), 4326))
         ).first()
-
         if not state_obj:
             return jsonify({"error": "No state found for given coordinates"}), 404
 
         county_obj = db.query(County).filter(
             ST_Contains(County.wkb_geometry, ST_SetSRID(ST_GeomFromText(point_wkt), 4326))
         ).first()
-
         if not county_obj:
             return jsonify({"error": "No county found for given coordinates"}), 404
+
+        state_geo_key = f"geojson:state:{state_obj.geoidfq}"
+        county_geo_key = f"geojson:county:{county_obj.geoidfq}"
+
+        # Try to get cached geometry
+        state_geojson = redis_client.get(state_geo_key)
+        county_geojson = redis_client.get(county_geo_key)
+
+        # If not cached, convert and cache
+        if not state_geojson:
+            state_geojson = to_geojson_from_wkb(state_obj.wkb_geometry)
+            redis_client.set(state_geo_key, json.dumps(state_geojson))  # no TTL
+        else:
+            state_geojson = json.loads(state_geojson)
+
+        if not county_geojson:
+            county_geojson = to_geojson_from_wkb(county_obj.wkb_geometry)
+            redis_client.set(county_geo_key, json.dumps(county_geojson))
+        else:
+            county_geojson = json.loads(county_geojson)
 
         state_demo = db.query(StateDemography).filter_by(geoidfq=state_obj.geoidfq).all()
         county_demo = db.query(CountyDemography).filter_by(geoidfq=county_obj.geoidfq).all()
@@ -87,12 +127,12 @@ def fetch_demographics(lat, lng):
         return jsonify({
             "state": {
                 "name": state_obj.name,
-                "geography": to_geojson_from_wkb(state_obj.wkb_geometry),
+                "geography": state_geojson,
                 "demographics": [model_to_dict(d) for d in state_demo]
             },
             "county": {
                 "name": county_obj.name,
-                "geography": to_geojson_from_wkb(county_obj.wkb_geometry),
+                "geography": county_geojson,
                 "demographics": [model_to_dict(d) for d in county_demo]
             }
         })
@@ -109,11 +149,10 @@ def fetch_cities_within_polygon(data, page, per_page, sort_by, sort_order):
     except Exception as e:
         return jsonify({"error": f"Invalid polygon WKT: {str(e)}"}), 400
 
+    redis_client = cache.redis_client
+
     with next(get_db()) as db:
-        query = db.query(
-            City.name, City.state_name, City.aland,
-            City.centroid_lat, City.centroid_lon, City.geoidfq
-        ).filter(
+        query = db.query(City.geoidfq).filter(
             ST_Within(ST_SetSRID(City.wkb_geometry, 4326), polygon_geom)
         )
 
@@ -123,16 +162,45 @@ def fetch_cities_within_polygon(data, page, per_page, sort_by, sort_order):
         order_column = getattr(City, sort_by)
         query = query.order_by(order_column.asc() if sort_order == 'asc' else order_column.desc())
 
-        cities = query.offset((page - 1) * per_page).limit(per_page).all()
+        # Get just geoidfqs for pagination
+        city_ids = [r[0] for r in query.offset((page - 1) * per_page).limit(per_page).all()]
         total = db.query(City).filter(
             ST_Within(ST_SetSRID(City.wkb_geometry, 4326), polygon_geom)
         ).count()
 
+        cities = []
+        missing_ids = []
+        city_map = {}
+
+        # Try Redis cache
+        for cid in city_ids:
+            key = f"city:data:{cid}"
+            cached = redis_client.get(key)
+            if cached:
+                city_map[cid] = json.loads(cached)
+            else:
+                missing_ids.append(cid)
+
+        # Fetch missing cities from DB
+        if missing_ids:
+            db_cities = db.query(City).filter(City.geoidfq.in_(missing_ids)).all()
+            for city in db_cities:
+                city_data = {
+                    "name": city.name,
+                    "state_name": city.state_name,
+                    "aland": city.aland,
+                    "lat": city.centroid_lat,
+                    "lng": city.centroid_lon,
+                    "geoidfq": city.geoidfq
+                }
+                redis_client.set(f"city:data:{city.geoidfq}", json.dumps(city_data))
+                city_map[city.geoidfq] = city_data
+
+        # Maintain original order
+        cities = [city_map[cid] for cid in city_ids if cid in city_map]
+
         return jsonify({
-            "cities": [{
-                "name": city[0], "state_name": city[1], "aland": city[2],
-                "lat": city[3], "lng": city[4], "geoidfq": city[5]
-            } for city in cities],
+            "cities": cities,
             "pagination": {
                 "page": page,
                 "per_page": per_page,

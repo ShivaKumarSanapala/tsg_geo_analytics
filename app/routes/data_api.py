@@ -1,10 +1,6 @@
 from flask import  request, jsonify
-from app.models.entities import City, County, State, StateDemography, CountyDemography
 from app.services import cache
-from app.services.database import SessionLocal, get_db
 from app.services.geospatial import fetch_demographics
-from app.utils.geo_utils import to_geojson_from_wkb
-from geoalchemy2.functions import ST_SetSRID, ST_GeomFromText, ST_Contains
 from flask import Blueprint
 
 data_api = Blueprint('data_api', __name__)
