@@ -73,7 +73,9 @@ def load_data_for_all_years():
 def load_demographic_data():
     print("Generating CSVs using batch_data_from_acs.sh...")
     try:
-        subprocess.run(["bash", "./batch_data_from_acs.sh"], check=True)
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        script_path = os.path.join(script_dir, "batch_data_from_acs.sh")
+        subprocess.run(["bash", script_path], check=True)
         print("CSV generation completed.")
     except subprocess.CalledProcessError as e:
         print("CSV generation failed!")

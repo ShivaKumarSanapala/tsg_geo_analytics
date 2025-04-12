@@ -11,6 +11,7 @@ RUN apt-get update && \
     apt-get install -y \
     curl \
     unzip \
+    vim \
     build-essential \
     libpq-dev \
     gdal-bin \
