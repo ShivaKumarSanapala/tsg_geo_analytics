@@ -1,17 +1,35 @@
-python3 -m venv venv    
-source venv/bin/activate
+Sure! Here's a clean and professional `README.md` snippet for your project:
 
-# Set file paths
-cp cb_2023_us_state_500k.zip cb_2023_us_region_500k.zip /tmp/
-unzip /tmp/cb_2023_us_state_500k.zip -d /tmp
+---
 
-# Convert SHP to GeoJSON
-mapshaper /tmp/cb_2023_us_state_500k.shp -o format=geojson /tmp/cb_2023_us_state_500k.geo.json
+# TSG Geo Analytics
 
-# Load into PostgreSQL using environment variables
-ogr2ogr \
-  -f "PostgreSQL" \
-  PG:"host=${POSTGRES_HOST} user=${POSTGRES_USER} dbname=${POSTGRES_DB} password=${POSTGRES_PASSWORD}" \
-  /tmp/cb_2023_us_state_500k.geo.json \
-  -nln gis.states_table \
-  -append
+This project provides tools for analyzing geospatial data using a PostgreSQL backend with PostGIS support. Below are the steps to build and run the application.
+
+---
+
+## 🚀 Getting Started
+
+### 1. Build Docker Image
+
+To build the Docker image for the application, run the following command in the root directory:
+
+```bash
+docker build --no-cache -t tsg_geo_analytics .
+```
+
+This will create a fresh image of the `tsg_geo_analytics` container without using cached layers.
+
+---
+
+### 2. Load Data into PostgreSQL
+
+After the containers are up and running via `docker-compose`, you can load the required data into the PostgreSQL database by executing:
+
+```bash
+docker-compose exec tsg_backend python -m app.scripts.load_data
+```
+
+This command runs the data loading script inside the backend container.
+
+---
