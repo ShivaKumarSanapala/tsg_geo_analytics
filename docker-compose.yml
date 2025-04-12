@@ -9,10 +9,16 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data_p:/var/lib/postgresql/data
+      - postgres_data_1:/var/lib/postgresql/data
       - ./scripts/schema.sql:/docker-entrypoint-initdb.d/schema.sql
     networks:
       - postgres_network
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "${POSTGRES_USER}", "-d", "${POSTGRES_DB}", "-h", "localhost"]
+      interval: 10s
+      retries: 5
+      start_period: 30s
+      timeout: 10s
 
   redis:
     image: redis:7
@@ -33,17 +39,20 @@ services:
     ports:
       - "5050:80"
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     networks:
       - postgres_network
 
   tsg_backend:
     image: tsg_geo_analytics
     ports:
-      - "${APP_PORT}:5000"
+      - "${APP_PORT}:5001"
     depends_on:
-      - db
-      - redis
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
     networks:
       - postgres_network
     environment:
@@ -57,7 +66,7 @@ services:
     command: ["python", "-m", "app.main"]
 
 volumes:
-  postgres_data_p:
+  postgres_data_1:
     driver: local
 
 networks:

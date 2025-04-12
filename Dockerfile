@@ -1,11 +1,9 @@
+FROM alpine/git AS cloner
+WORKDIR /src
+RUN git clone --depth 1 https://github.com/ShivaKumarSanapala/tsg_geo_analytics.git .
+
 FROM python:3.11
-
-RUN apt-get update && apt-get install -y git
-
 WORKDIR /app
-
-RUN git clone https://github.com/ShivaKumarSanapala/tsg_geo_analytics.git .
-
+COPY --from=cloner /src /app
 RUN pip install -r requirements.txt
-
 CMD ["python", "-m", "app.main"]
