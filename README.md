@@ -2,7 +2,7 @@
 
 # 🗺️ TSG Geo Analytics
 
-**TSG Geo Analytics** is a full-stack platform for geospatial data analytics and visualization. It combines a modern React frontend, a Flask-based Python backend, and a PostgreSQL/PostGIS database—fully containerized using Docker and orchestrated via Docker Compose.
+TSG Geo Analytics is a full-stack platform for geospatial data analytics and visualization. It combines a modern React frontend, a Flask-based Python backend, and a PostgreSQL/PostGIS database—fully containerized using Docker and orchestrated via Docker Compose.
 
 ---
 
