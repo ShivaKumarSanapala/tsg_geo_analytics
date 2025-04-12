@@ -46,6 +46,7 @@ services:
 
   tsg_backend:
     image: tsg_geo_analytics
+    container_name: tsg_geo_analytics
     ports:
       - "${APP_PORT}:5001"
     depends_on:

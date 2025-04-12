@@ -1,6 +1,7 @@
 import os
 import pandas as pd
 import subprocess
+import traceback
 
 from app.models.entities import StateDemography, CountyDemography
 from app.services.database import get_db
@@ -54,23 +55,42 @@ def load_county_data(csv_file, year):
     session.commit()
 
 def load_data_for_all_years():
-    # List of years for which we have CSV data
     years = range(2017, 2024)
+    base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "./data"))
 
     for year in years:
-        state_csv = f'./data/{year}_states_demography.csv'
-        county_csv = f'./data/{year}_counties_demography.csv'
+        state_csv = os.path.join(base_dir, f"{year}_states_demography.csv")
+        county_csv = os.path.join(base_dir, f"{year}_counties_demography.csv")
 
-        # Load state and county data for each year
-        if os.path.exists(state_csv) and os.path.exists(county_csv):
-            print(f"Loading data for year {year}...")
-            load_state_data(state_csv, year)
-            load_county_data(county_csv, year)
-        else:
-            print(f"Data files for year {year} not found. Skipping...")
+        print(f"\n📅 Processing year {year}...state: {state_csv} county: {county_csv}")
 
+        # Flags for each
+        state_ok = os.path.exists(state_csv)
+        county_ok = os.path.exists(county_csv)
 
-def load_demographic_data():
+        if not state_ok and not county_ok:
+            print(f"⚠️  No data files found for {year}. Skipping...")
+            continue
+
+        if state_ok:
+            try:
+                print(f"📥 Loading state data from {state_csv}")
+                load_state_data(state_csv, year)
+            except Exception as e:
+                print(f"❌ Failed to load state data for {year}: {e}")
+                traceback.print_exc()
+
+        if county_ok:
+            try:
+                print(f"📥 Loading county data from {county_csv}")
+                load_county_data(county_csv, year)
+            except Exception as e:
+                print(f"❌ Failed to load county data for {year}: {e}")
+                traceback.print_exc()
+
+    print("\n✅ Finished processing all available data files.")
+
+def generate_csv_files():
     print("Generating CSVs using batch_data_from_acs.sh...")
     try:
         script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -81,6 +101,9 @@ def load_demographic_data():
         print("CSV generation failed!")
         print(e)
         exit(1)
+
+def load_demographic_data():
+    # generate_csv_files()
     print("Demographic Data loading into Database....please wait...")
     load_data_for_all_years()
     print("Demographic Data loading into Database for States and Counties completed!")

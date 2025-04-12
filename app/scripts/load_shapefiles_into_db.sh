@@ -6,7 +6,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Set paths
-SHAPEFILES_DIR="${SCRIPT_DIR}/../shapefiles"
+SHAPEFILES_DIR="${SCRIPT_DIR}/shapefiles"
 WORKDIR="/tmp"
 
 # Declare a mapping from file prefix to table name
