@@ -14,3 +14,7 @@ Flask
 Flask-CORS
 python-dotenv
 shapely
+numpy
+seaborn
+matplotlib
+scikit-learn
