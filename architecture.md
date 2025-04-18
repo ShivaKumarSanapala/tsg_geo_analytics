@@ -2,7 +2,7 @@
 
 This document provides an architectural overview of the application, outlining the key components and how they interact to deliver functionality.
 
-![TSG Geo Analytics Architecture](docs/Architecture.png)
+![TSG Geo Analytics Architecture](docs/architecture.png)
 
 ## Frontend Architecture
 
